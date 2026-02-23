@@ -192,7 +192,7 @@ export async function createPitchListener({
   onNotes,
   onOnset,
   deviceId,
-  minEnergy = 0.03,
+  minEnergy = 0.01,
   hysteresisRatio = 0.6,
   clarityThreshold = 0.88,
   minFreq = 82,

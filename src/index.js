@@ -1,9 +1,9 @@
 import { PitchDetector } from "pitchy";
 
-  //  AUDIO WORKLET PROCESSOR (inlined as a Blob)
-  //  Runs on the audio thread, posts raw PCM frames
+//  AUDIO WORKLET PROCESSOR (inlined as a Blob)
+//  Runs on the audio thread, posts raw PCM frames
 
-const WORKLET_CODE =`
+const WORKLET_CODE = `
 class PitchProcessorNode extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -31,14 +31,27 @@ registerProcessor("pitch-processor", PitchProcessorNode);
    CONSTANTS
    ───────────────────────────────────────────── */
 const A4 = 440;
-const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const NOTE_NAMES = [
+  "C",
+  "C#",
+  "D",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "G#",
+  "A",
+  "A#",
+  "B",
+];
 const FRAME_SIZE = 2048;
 
 // Guitar band splits: [label, lowHz, highHz]
 const BANDS = [
-  ["bass",   82,   200],
-  ["mid",   200,   500],
-  ["treble",500,  1319],
+  ["bass", 82, 200],
+  ["mid", 200, 500],
+  ["treble", 500, 1319],
 ];
 
 /* ─────────────────────────────────────────────
@@ -78,8 +91,13 @@ function rms(buf) {
 function mostCommon(arr) {
   const c = {};
   arr.forEach((n) => (c[n] = (c[n] || 0) + 1));
-  let max = 0, winner = null;
-  for (const n in c) if (c[n] > max) { max = c[n]; winner = n; }
+  let max = 0,
+    winner = null;
+  for (const n in c)
+    if (c[n] > max) {
+      max = c[n];
+      winner = n;
+    }
   return winner;
 }
 
@@ -97,14 +115,18 @@ function mostCommon(arr) {
  * @param {object}       opts
  * @returns {Array<{freq, note, cents}>}
  */
-function fftPeakNotes(freqData, sampleRate, {
-  minFreq      = 82,
-  maxFreq      = 1319,
-  noiseFloor   = -60,   // dBFS below which we ignore bins
-  peakDelta    = 6,     // dB above neighbours to count as peak
-  harmonics    = 3,     // how many harmonics to validate
-  harmonicGain = -18,   // harmonic must be within XdB of fundamental
-} = {}) {
+function fftPeakNotes(
+  freqData,
+  sampleRate,
+  {
+    minFreq = 82,
+    maxFreq = 1319,
+    noiseFloor = -60, // dBFS below which we ignore bins
+    peakDelta = 6, // dB above neighbours to count as peak
+    harmonics = 3, // how many harmonics to validate
+    harmonicGain = -18, // harmonic must be within XdB of fundamental
+  } = {},
+) {
   const binHz = sampleRate / (2 * (freqData.length - 1));
   const results = [];
 
@@ -116,7 +138,8 @@ function fftPeakNotes(freqData, sampleRate, {
     if (mag < noiseFloor) continue;
     // local peak check
     if (mag <= freqData[i - 1] || mag <= freqData[i + 1]) continue;
-    if (mag - freqData[i - 1] < peakDelta && mag - freqData[i + 1] < peakDelta) continue;
+    if (mag - freqData[i - 1] < peakDelta && mag - freqData[i + 1] < peakDelta)
+      continue;
 
     const freq = i * binHz;
 
@@ -152,12 +175,22 @@ function fftPeakNotes(freqData, sampleRate, {
  */
 function createBandDetectors(clarityThreshold, bufferSize) {
   return BANDS.map(([label, lo, hi]) => {
-    const detector  = PitchDetector.forFloat32Array(FRAME_SIZE);
+    const detector = PitchDetector.forFloat32Array(FRAME_SIZE);
     const noteBuffer = [];
-    let lastNote    = null;
-    let lastEnergy  = 0;
+    let lastNote = null;
+    let lastEnergy = 0;
 
-    return { label, lo, hi, detector, noteBuffer, lastNote, lastEnergy, bufferSize, clarityThreshold };
+    return {
+      label,
+      lo,
+      hi,
+      detector,
+      noteBuffer,
+      lastNote,
+      lastEnergy,
+      bufferSize,
+      clarityThreshold,
+    };
   });
 }
 
@@ -176,11 +209,11 @@ function runBandDetector(band, frame, sampleRate, minEnergy, hysteresisRatio) {
   const energy = rms(frame);
 
   // Silence hysteresis: note-on at minEnergy, note-off at minEnergy * hysteresisRatio
-  const onThreshold  = minEnergy;
+  const onThreshold = minEnergy;
   const offThreshold = minEnergy * hysteresisRatio;
 
   if (energy < offThreshold) {
-    band.lastNote   = null;
+    band.lastNote = null;
     band.lastEnergy = energy;
     return null;
   }
@@ -207,16 +240,16 @@ function runBandDetector(band, frame, sampleRate, minEnergy, hysteresisRatio) {
   const isOnset = band.lastEnergy < onThreshold && energy >= onThreshold;
   const noteChanged = smoothed !== band.lastNote;
 
-  band.lastNote   = smoothed;
+  band.lastNote = smoothed;
   band.lastEnergy = energy;
 
   if (noteChanged || isOnset) {
     return {
-      source:   "band:" + band.label,
-      note:     smoothed,
+      source: "band:" + band.label,
+      note: smoothed,
       freq,
       clarity,
-      cents:    centDeviation(freq),
+      cents: centDeviation(freq),
       isOnset,
       energy,
     };
@@ -237,8 +270,9 @@ function mergeNotes(bandNotes, fftNotes, activeNotes, minEnergy) {
 
   for (const fn of fftNotes) {
     const midi = freqToMidi(fn.freq);
-    const dup  = all.some((n) => Math.abs(freqToMidi(n.freq) - midi) <= 1);
-    if (!dup) all.push({ source: "fft", isOnset: !activeNotes.has(fn.note), ...fn });
+    const dup = all.some((n) => Math.abs(freqToMidi(n.freq) - midi) <= 1);
+    if (!dup)
+      all.push({ source: "fft", isOnset: !activeNotes.has(fn.note), ...fn });
   }
 
   return all;
@@ -279,14 +313,15 @@ export async function createPitchListener({
   onNotes,
   onOnset,
   deviceId,
-  minEnergy        = 0.03,
-  hysteresisRatio  = 0.6,
+  minEnergy = 0.03,
+  hysteresisRatio = 0.6,
   clarityThreshold = 0.88,
-  minFreq          = 82,
-  maxFreq          = 1319,
-  smoothing        = 5,
+  minFreq = 82,
+  maxFreq = 1319,
+  smoothing = 5,
 } = {}) {
-  if (!navigator.mediaDevices?.getUserMedia) throw new Error("Browser does not support microphone access.");
+  if (!navigator.mediaDevices?.getUserMedia)
+    throw new Error("Browser does not support microphone access.");
   const ACtx = window.AudioContext ?? window.webkitAudioContext;
   if (!ACtx) throw new Error("Browser does not support Web Audio API.");
 
@@ -300,7 +335,7 @@ export async function createPitchListener({
       audio: {
         ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
         echoCancellation: false,
-        autoGainControl:  false,
+        autoGainControl: false,
         noiseSuppression: false,
         latency: 0,
       },
@@ -313,43 +348,54 @@ export async function createPitchListener({
   if (context.state === "suspended") await context.resume();
 
   /* -- AudioWorklet --------------------------------------------------- */
-  const blob    = new Blob([WORKLET_CODE], { type: "application/javascript" });
+  const blob = new Blob([WORKLET_CODE], { type: "application/javascript" });
   const blobUrl = URL.createObjectURL(blob);
   await context.audioWorklet.addModule(blobUrl);
   URL.revokeObjectURL(blobUrl);
 
-  const source    = context.createMediaStreamSource(stream);
-  const worklet   = new AudioWorkletNode(context, "pitch-processor");
+  const source = context.createMediaStreamSource(stream);
+  const worklet = new AudioWorkletNode(context, "pitch-processor");
 
   /* -- AnalyserNode for FFT ------------------------------------------ */
-  const analyser       = context.createAnalyser();
-  analyser.fftSize     = 8192;  // high resolution for FFT peak picker
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 8192; // high resolution for FFT peak picker
   analyser.smoothingTimeConstant = 0.5;
-  const fftBuf         = new Float32Array(analyser.frequencyBinCount);
+  const fftBuf = new Float32Array(analyser.frequencyBinCount);
 
   /* -- Highpass filter ------------------------------------------------ */
-  const hpf            = context.createBiquadFilter();
-  hpf.type             = "highpass";
-  hpf.frequency.value  = 70;
+  const hpf = context.createBiquadFilter();
+  hpf.type = "highpass";
+  hpf.frequency.value = 70;
 
   source.connect(hpf);
   hpf.connect(analyser);
-  hpf.connect(worklet);   // worklet gets filtered signal too
+  hpf.connect(worklet); // worklet gets filtered signal too
 
   /* -- Band detectors ------------------------------------------------- */
-  const bands      = createBandDetectors(clarityThreshold, smoothing);
-  const activeNotes = new Set();   // currently sounding notes (for onset tracking)
+  const bands = createBandDetectors(clarityThreshold, smoothing);
+  const activeNotes = new Set(); // currently sounding notes (for onset tracking)
 
   /* -- Main processing handler --------------------------------------- */
   worklet.port.onmessage = ({ data: frame }) => {
     // --- Band-split detections ---
     const bandNotes = bands
-      .map((band) => runBandDetector(band, frame, context.sampleRate, minEnergy, hysteresisRatio))
+      .map((band) =>
+        runBandDetector(
+          band,
+          frame,
+          context.sampleRate,
+          minEnergy,
+          hysteresisRatio,
+        ),
+      )
       .filter(Boolean);
 
     // --- FFT peak detections ---
     analyser.getFloatFrequencyData(fftBuf);
-    const fftNotes = fftPeakNotes(fftBuf, context.sampleRate, { minFreq, maxFreq });
+    const fftNotes = fftPeakNotes(fftBuf, context.sampleRate, {
+      minFreq,
+      maxFreq,
+    });
 
     // --- Merge & deduplicate ---
     const detected = mergeNotes(bandNotes, fftNotes, activeNotes);
@@ -366,13 +412,18 @@ export async function createPitchListener({
     if (onsets.length && onOnset) onOnset(onsets);
   };
 
+  // a gain node with volume 0 — silent, but keeps the worklet alive
+  const silentGain = context.createGain();
+  silentGain.gain.value = 0;
+  silentGain.connect(context.destination);
+
   let connected = false;
 
   return {
     start() {
       if (connected) return;
       connected = true;
-      worklet.connect(context.destination);  // worklet needs to be in the graph to run
+      worklet.connect(silentGain); // ← routes to silence instead of speakers
     },
 
     stop() {
